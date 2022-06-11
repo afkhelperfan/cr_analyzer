@@ -14,10 +14,11 @@ import matplotlib.pyplot as plt
 
 
 class OCR:
-    def __init__(self, trial, comp = 1, isViz=False, mask_data_path = "dmg_data_4k.json", db_path="data/char_data.db", results_path="data/cr_results.db"):
+    def __init__(self, boss, trial, comp = 1, isViz=False, mask_data_path = "dmg_data_4k.json", db_path="data/char_data.db", results_path="data/cr_results.db"):
         self.isViz = isViz
         self.trial = trial
         self.comp  = comp
+        self.boss = boss
 
         #load mask location of the dps digits
         self.mask_data_file = open(mask_data_path)
@@ -30,7 +31,7 @@ class OCR:
         self.path = "data/{0}/{1}.png".format(self.trial, self.comp)
         self.label_path = "data/char_label/{0}.json".format(self.comp)
         self.label_data_char = json.load(open(self.label_path))
-        self.tree_path = "data/{0}/tree.json".format(self.trial)
+        self.tree_path = "data/{0}/{1}/tree.json".format(self.boss, self.trial)
         self.tree = json.load(open(self.tree_path))
         self.label_data = self.mask_data[0]["annotations"]
 
@@ -43,14 +44,14 @@ class OCR:
 
     def set_trial(self, trial):
         self.trial = trial
-        self.path = "data/{0}/{1}.png".format(self.trial, self.comp)
-        self.label_path = "data/char_label/{0}.json".format(self.comp)
+        self.path = "data/{0}/{1}/{2}.png".format(self.boss, self.trial, self.comp)
+        self.label_path = "data/{0}/char_label/{1}.json".format(self.boss, self.comp)
         self.label_data_char = json.load(open(self.label_path))        
 
     def set_comp(self, comp):
         self.comp = comp
-        self.path = "data/{0}/{1}.png".format(self.trial, self.comp)
-        self.label_path = "data/char_label/{0}.json".format(self.comp)
+        self.path = "data/{0}/{1}/{2}.png".format(self.boss, self.trial, self.comp)
+        self.label_path = "data/{0}/char_label/{1}.json".format(self.boss, self.comp)
         self.label_data_char = json.load(open(self.label_path))
 
     def filter_numbers(self, text):
@@ -86,7 +87,9 @@ class OCR:
             if self.isViz:
                 cv2.imshow("mask {0}".format(i), masked_img_arr[i])
                 cv2.waitKey(100)
+                cv2.imwrite("data/{0}/{1}/masked_{2}.png".format(self.boss, self.trial, i+1), masked_img_arr[i])
 
+                
         return masked_img_arr, label_arr
 
     def segmentate_digits(self, img, thres = 189, kernel=(4,4), isNoDilate = False, counter = 0):
@@ -104,12 +107,13 @@ class OCR:
 
 
         ret, bin = cv2.threshold(img_amp,thres,255,cv2.THRESH_BINARY)
-    
+        bin = cv2.bitwise_not(bin)
 
 
         if self.isViz:
             cv2.imshow("segmentation {0}".format(counter),  bin)
-            cv2.waitKey(1000)
+            cv2.imwrite("data/{0}/{1}/{2}_bin.png".format(self.boss, self.trial, counter), bin)
+            cv2.waitKey(10)
 
         return bin
 
@@ -215,7 +219,7 @@ class OCR:
             idx = self.df.index[self.df["name"] == self.label_data_char[k]]
             iscarry = self.df.at[idx[0], "carry"]
 
-            if v > 5:
+            if v > 8:
                 score -= 1                
 
             elif iscarry == 3:
@@ -267,7 +271,7 @@ class OCR:
     def record_results(self, total_dmg, role_results, char_results):
         result = {"total_dmg" : total_dmg, "role_results" : role_results, "char_results ": char_results}
         json_data = json.dumps(result)
-        output = open("data/{0}/{1}_result.json".format(trial, self.comp), "w+")
+        output = open("data/{0}/{1}/{2}_result.json".format(self.boss, self.trial, self.comp), "w+")
         output.write(json_data)
 
     def record_results(self, b_results, total_dmg, role_results, char_results):
@@ -299,10 +303,11 @@ class OCR:
     
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        trial = int(sys.argv[1])
-        isViz = True if len(sys.argv) > 2 else False
-        ocr = OCR(trial, isViz=isViz)
+    if len(sys.argv) > 2:
+        boss = sys.argv[1]
+        trial = int(sys.argv[2])
+        isViz = True if len(sys.argv) > 3 else False
+        ocr = OCR(boss, trial, isViz=isViz)
 
         #loop through each comps
         for i in range(1, 7):
@@ -361,5 +366,5 @@ if __name__ == "__main__":
                 ocr.record_results(b_results_no, total_dmg_no, role_results_no, char_results_no)
 
     else:
-        print("Usage : python3 analyze_cr.py [trial]")
+        print("Usage : python3 analyze_cr.py [boss] [trial]")
 
