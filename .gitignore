@@ -3,4 +3,6 @@
 # vscode
 .vscode/
 data/*.png
+data/*/*/*.png
+data/*/*/*.json
 reports/
