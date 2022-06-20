@@ -29,7 +29,7 @@ class OCR:
         self.dst_con = sqlite3.connect(results_path)
         #load image and character label of the comp
         self.path = "data/{0}/{1}.png".format(self.trial, self.comp)
-        self.label_path = "data/char_label/{0}.json".format(self.comp)
+        self.label_path = "data/{0}/char_label/{1}.json".format(self.boss, self.comp)
         self.label_data_char = json.load(open(self.label_path))
         self.tree_path = "data/{0}/{1}/tree.json".format(self.boss, self.trial)
         self.tree = json.load(open(self.tree_path))
