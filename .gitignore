@@ -5,4 +5,3 @@
 data/*.png
 data/*/*/*.png
 data/*/*/*.json
-reports/
