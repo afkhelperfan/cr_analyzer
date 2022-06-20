@@ -66,3 +66,19 @@ The reports are generated in reports/ folder.
 ![char](reports/sus-0.0fort-0.0sorc-0.0cele-0.0might-0.0--character.png)
 
 ![overview](reports/sus-0.0fort-0.0sorc-0.0cele-0.0might-0.0--overview.png)
+
+## WIP
+```python
+python3 image_matcher.py
+```
+able to recognize comp character information.  
+
+## Roadmap  
+- [ ] Role - Sum based correlation
+- [ ] Removing Redundant Ensemble Learning
+- [ ] Calculate RNG and make a list of damage range in probability
+- [ ] Adding new metrics : Tree - Comp Nonlinear relationship
+- [ ] Adding new metrics : Power Ratings
+- [ ] Making High Precision Character Matching
+- [ ] Finding Searching Strategy for Tree stats
+
