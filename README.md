@@ -1,7 +1,7 @@
 # cr_analyzer
-auto detecting cr results with OCR.
+auto detecting AFK Arena CR Results with OCR.
 
-## dependencies
+## Dependencies
 ### Python  
 pytesseract  
 opencv-python  
@@ -27,6 +27,8 @@ It only works on fixed resolution setup, so this needs to be setup again if you 
 ```bash
 labelImg
 ```
+![labelimg](labelimg.png)
+
 
 3. Enter what character did you use in the data/char_label/{round}.json. This feature would be refined by editing in gui in future.  
 ```json
@@ -34,6 +36,7 @@ labelImg
 ```
 
 4. Modify the db char_data.db using sqlite browser and add new character and roles.  
+![db](db.png)
 
 ## Run
 
@@ -56,4 +59,10 @@ labelImg
 ```python  
 python3 trial_summary.py
 ```  
+The reports are generated in reports/ folder.
 
+![corr](reports/sorc-corr.png)
+
+![char](reports/sus-0.0fort-0.0sorc-0.0cele-0.0might-0.0--character.png)
+
+![overview](reports/sus-0.0fort-0.0sorc-0.0cele-0.0might-0.0--overview.png)
