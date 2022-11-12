@@ -1,3 +1,4 @@
+from pdb import line_prefix
 import cv2
 import json
 import numpy as np
@@ -9,50 +10,114 @@ import sqlite3
 import pandas as pd
 import time
 import matplotlib.pyplot as plt
+from linedetect import StatDetector
+from compdetect import CompDetection
+import platform
+import argparse
+import os
+ 
 
-
-
+if platform.system() == "Windows":
+    path_tesseract = "C:\\Program Files\\Tesseract-OCR"
+    if path_tesseract not in os.environ["PATH"].split(os.pathsep):
+        os.environ["PATH"] += os.pathsep + path_tesseract
 
 class OCR:
-    def __init__(self, boss, trial, comp = 1, isViz=False, mask_data_path = "dmg_data_4k.json", db_path="data/char_data.db", results_path="data/cr_results.db"):
+    def __init__(self, boss, user, trial, comp = 1, lang="jpn", isViz=False, thres=189, line_detect=False, comp_detect=False, full_scan = False, mask_data_path = "dmg_data_4k.json", db_path="data/char_data.db", results_path="data/cr_results.db"):
         self.isViz = isViz
         self.trial = trial
         self.comp  = comp
+        self.user = user
         self.boss = boss
+        self.lang = lang
+        self.line_detect = line_detect
+        self.comp_detect = comp_detect
+        self.thres = thres
+        self.full_scan = full_scan
 
-        #load mask location of the dps digits
-        self.mask_data_file = open(mask_data_path)
-        self.mask_data = json.load(self.mask_data_file)
+        self.statDetector = StatDetector() 
+        self.compDetector = CompDetection(isViz=isViz)
+        self.mask_data = dict()
+
+        self.label_data = None
+        #load mask location of  the dps digits
+        if not line_detect:
+            print("loading mask data")
+            self.mask_data_file = open("data/{0}/{1}/{2}".format(boss, self.user, mask_data_path))
+            jsondata = json.load(self.mask_data_file)
+            for i in range(1, 7):
+                self.mask_data[i] = jsondata
         #load char data db
         self.con = sqlite3.connect(db_path)
         self.df = pd.read_sql_query("SELECT * FROM char_data", self.con)
         self.dst_con = sqlite3.connect(results_path)
         #load image and character label of the comp
-        self.path = "data/{0}/{1}.png".format(self.trial, self.comp)
-        self.label_path = "data/{0}/char_label/{1}.json".format(self.boss, self.comp)
-        self.label_data_char = json.load(open(self.label_path))
-        self.tree_path = "data/{0}/{1}/tree.json".format(self.boss, self.trial)
+        self.path = "data/{0}/{1}/{2}/{3}.png".format(self.boss, self.user, self.trial, self.comp)
+
+        if not comp_detect:
+            self.label_path = "data/{0}/{1}/char_label/{2}.json".format(self.boss, self.user, self.comp)
+            self.label_data_char = json.load(open(self.label_path))
+        self.tree_path = "data/{0}/{1}/{2}/tree.json".format(self.boss, self.user, self.trial)
         self.tree = json.load(open(self.tree_path))
-        self.label_data = self.mask_data[0]["annotations"]
+        self.comp_data = dict()
+
+
+    def init(self):
+        self.label_data = self.mask_data[self.comp][0]["annotations"]
+        
 
     def load_image(self):
-        img = cv2.imread(self.path)
+        print(self.path)
+        self.img = cv2.imread(self.path)
+        if self.img is None:
+            self.img = cv2.imread(self.path.replace("png", "jpg"))
+        self.img_h, _, _ = self.img.shape
         if self.isViz:
-            cv2.imshow("input image", img)
+            cv2.imshow("input image", self.img)
             cv2.waitKey(1000)
-        return img
+        if self.line_detect:
+            print("detecting line")
+            if not self.comp in self.mask_data.keys():
+                self.mask_data[self.comp] = self.statDetector.detect(self.img)
+                f = open("data/{0}/{1}/{2}/{3}_dmg_data.json".format(self.boss, self.user, self.trial, self.comp), "w")
+                json.dump(self.mask_data[self.comp], f)
+        
+        return self.img
+
+    def resize_image(self, img):
+        if self.img_h != 3840:
+            h, w, _ = img.shape
+            resized = cv2.resize(img, dsize=(w*5, h*5), interpolation=cv2.INTER_LANCZOS4)
+            return resized
+        else:
+            return img
 
     def set_trial(self, trial):
         self.trial = trial
-        self.path = "data/{0}/{1}/{2}.png".format(self.boss, self.trial, self.comp)
-        self.label_path = "data/{0}/char_label/{1}.json".format(self.boss, self.comp)
-        self.label_data_char = json.load(open(self.label_path))        
+        self.path = "data/{0}/{1}/{2}/{3}.png".format(self.boss, self.user, self.trial, self.comp)
+        if not self.comp_detect:
+            self.label_path = "data/{0}/{1}/char_label/{2}.json".format(self.boss, self.user, self.comp)
+            self.label_data_char = json.load(open(self.label_path))
+        self.tree_path = "data/{0}/{1}/{2}/tree.json".format(self.boss, self.user, self.trial)
+        self.tree = json.load(open(self.tree_path))        
 
-    def set_comp(self, comp):
-        self.comp = comp
-        self.path = "data/{0}/{1}/{2}.png".format(self.boss, self.trial, self.comp)
-        self.label_path = "data/{0}/char_label/{1}.json".format(self.boss, self.comp)
-        self.label_data_char = json.load(open(self.label_path))
+    def set_comp(self):
+        if self.comp_detect:
+            if not "comp_{0}".format(self.comp) in self.comp_data.keys() or self.full_scan:
+                self.comp_data["comp_{0}".format(self.comp)] = self.compDetector.detect(self.img)
+                f =  open("data/{0}/{1}/{2}/{3}.json".format(self.boss, self.user, self.trial, self.comp), "w+")
+                json.dump(self.comp_data["comp_{0}".format(self.comp)],f)
+            self.label_data_char = self.comp_data["comp_{0}".format(self.comp)]
+            
+        else:
+            self.label_path = "data/{0}/{1}/char_label/{2}.json".format(self.boss, self.user, self.comp)
+            self.label_data_char = json.load(open(self.label_path))
+
+    def set_round(self, comp):
+        self.comp = comp        
+        self.path = "data/{0}/{1}/{2}/{3}.png".format(self.boss, self.user, self.trial, self.comp)
+        
+
 
     def filter_numbers(self, text):
         words = text.split("\n")
@@ -81,44 +146,45 @@ class OCR:
             h = int(self.label_data[i]["coordinates"]["height"]/2)
             label = self.label_data[i]["label"]
             masked_img = img[y-h:y+h, x-w:x+w]
-    
+            masked_img = self.resize_image(masked_img)
             masked_img_arr.append(masked_img)
             label_arr.append(label)
             if self.isViz:
                 cv2.imshow("mask {0}".format(i), masked_img_arr[i])
                 cv2.waitKey(100)
-                cv2.imwrite("data/{0}/{1}/masked_{2}.png".format(self.boss, self.trial, i+1), masked_img_arr[i])
+                cv2.imwrite("data/{0}/{1}/{2}/masked_{3}.png".format(self.boss, self.user, self.trial, i+1), masked_img_arr[i])
 
                 
         return masked_img_arr, label_arr
 
-    def segmentate_digits(self, img, thres = 189, kernel=(4,4), isNoDilate = False, counter = 0):
+    def segmentate_digits(self, img, kernel=(4,4), isNoDilate = False, counter = 0):
+
         img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         h, w = img_gray.shape
 
         img_amp = ""
 
         if isNoDilate:
-            print("no dilation")
+            #print("no dilation")
             img_amp = img_gray
         else:
-            print("doing dilation {0}".format(counter))
+            #print("doing dilation {0}".format(counter))
             img_amp = cv2.dilate(img_gray, np.ones(kernel, np.uint8) ,iterations = 1 )
 
-
-        ret, bin = cv2.threshold(img_amp,thres,255,cv2.THRESH_BINARY)
+        #print("threshold : {0}".format(self.thres))
+        ret, bin = cv2.threshold(img_amp,self.thres, 255,cv2.THRESH_BINARY)
         bin = cv2.bitwise_not(bin)
 
 
         if self.isViz:
             cv2.imshow("segmentation {0}".format(counter),  bin)
-            cv2.imwrite("data/{0}/{1}/{2}_bin.png".format(self.boss, self.trial, counter), bin)
+            cv2.imwrite("data/{0}/{1}/{2}/{3}_bin.png".format(self.boss, self.user, self.trial, counter), bin)
             cv2.waitKey(10)
 
         return bin
 
     def do_ocr(self, img):
-        text = pytesseract.image_to_string(img, lang="jpn")
+        text = pytesseract.image_to_string(img, lang=self.lang)
         return self.filter_numbers(text)
 
 
@@ -127,19 +193,28 @@ class OCR:
     def text2score(self, val):
         b_digit = 0
         m_digit = 0
+        k_digit = 0
 
         if val[-1] == "B":
             b_digit = float(val[0:len(val)-1])
             
         elif val[0] == "0":
             pass
-        else:
+        elif val[-1] == "M":
             m_digit = float(val[0:len(val)-1])
 
-        return b_digit, m_digit
+        elif val[-1] == "K":
+            k_digit = float(val[0:len(val)-1])
+        return b_digit, m_digit, k_digit
 
 
     def calculate_scores(self, text_results):
+
+        if self.lang == "eng":
+            print("lang : EN")
+            return self.calculate_scores_en(text_results)
+
+        print("lang : JP")
         for k, v in text_results.items():
     
             number = re.findall(r"[-+]?(?:\d*\.\d+|\d+)", v)
@@ -157,10 +232,27 @@ class OCR:
 
         return text_results
 
+    def calculate_scores_en(self, text_results):
+        for k, v in text_results.items():
+    
+            number = re.findall(r"[-+]?(?:\d*\.\d+|\d+)", v)
+            isMtext =  v.find("M") != -1
+            isKtext = v.find("K") != -1
+    
+            digit = float(number[0])
+            #isM = isMan or (not isMtext and 1 > digit/10) or (not isMan and digit/10 > 9)
+            #digit = round(digit / 100,2) if isMan else (math.floor(digit*100) if isM else round(digit/10,2)) 
+            unit =  "M" if isMtext else  ("K" if isKtext else "B")
+            val = str(digit) + unit
+
+            text_results[k] = val
+
+        return text_results        
+
     def calculate_b_score(self, text_results):
         for k, v in text_results.items():
-            b_digit, m_digit = self.text2score(v)
-            text_results[k] = b_digit + m_digit/1000
+            b_digit, m_digit, k_digit = self.text2score(v)
+            text_results[k] = b_digit + m_digit/1000 + k_digit/1000000
 
         return text_results
 
@@ -177,6 +269,7 @@ class OCR:
 
         for k, v in b_results.items():
             idx = self.df.index[self.df["name"] == self.label_data_char[k]]
+            print(self.label_data_char[k])
             name = self.df.at[idx[0], "name"]
             char_results[name] = v
         
@@ -266,7 +359,6 @@ class OCR:
         
         cv2.destroyAllWindows()
 
-        #return total_dmg, role_results, char_results
 
     def record_results(self, total_dmg, role_results, char_results):
         result = {"total_dmg" : total_dmg, "role_results" : role_results, "char_results ": char_results}
@@ -303,11 +395,81 @@ class OCR:
     
 
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("boss", help="boss name", type=str)
+    parser.add_argument("user", help="username", type=str)
+    parser.add_argument("trial_start",help="trial", type=int)
+    parser.add_argument("trial_end",help="trial", type=int)
+    parser.add_argument("lang", help="language(eng/jpn)", default="eng", type=str)
+    parser.add_argument("--bin_thres", help="binarization threshold", default=200, type=int)
+    parser.add_argument("--line_detect", help="use automatic stat detection", default=False, action='store_true')
+    parser.add_argument("--comp_detect", help="use automatic comp detection", default=False, action='store_true')
+    parser.add_argument("--is_viz", help="enable visualization", default=False, action='store_true')
+    parser.add_argument("--full_scan", help="do comp scanning and line detection on all trial", default="False", action="store_true")
+
+    args = vars(parser.parse_args())
+
+    boss = args["boss"]
+    user = args["user"]
+    trial_start = args["trial_start"]
+    trial_end = args["trial_end"]
+    lang = args["lang"]
+    binThres = args["bin_thres"]
+    line_detect = args["line_detect"]
+    comp_detect = args["comp_detect"]
+    isViz= args["is_viz"]
+    full_scan = args["full_scan"]
+    print(line_detect)
+    print(comp_detect)
+    print(isViz)
+    ocr = OCR(boss, user, trial_start, lang=lang, isViz=isViz, thres=binThres, line_detect= line_detect, comp_detect = comp_detect, full_scan = full_scan, mask_data_path="dmg_data.json", results_path="data/{0}/{1}/cr_results.db".format(boss, user))
+
+    for k in range(trial_start, trial_end + 1):
+        ocr.set_trial(k)
+
+        for i in range(1, 7):       
+            ocr.set_round(i)
+            img = ocr.load_image()
+            ocr.set_comp()
+            ocr.init()
+            masked_img_arr, label_arr = ocr.extract_regions(img)
+            seg_img_arr = [] 
+
+            #loop through each dps
+            for j in range(len(masked_img_arr)):
+                seg_img_arr.append(ocr.segmentate_digits(masked_img_arr[j], counter=5*(i-1)+(j+1), isNoDilate=False))
+
+
+            text_results = {}
+
+            for j in range(len(seg_img_arr)):
+                text_results[label_arr[j]] = ocr.do_ocr(seg_img_arr[j])
+
+            # calculate score in string(M/B unit)
+            text_results = ocr.calculate_scores(text_results)
+
+            # change numeric units in B
+            b_results = ocr.calculate_b_score(text_results)
+
+
+            # calculate misc data
+            char_results = ocr.calculate_char_score(b_results)
+            role_results = ocr.calculate_role_score(b_results)
+            total_dmg = ocr.calculate_sum_score(b_results)
+
+            ocr.record_results(b_results, total_dmg, role_results, char_results)
+            cv2.destroyAllWindows()
+
+    """
     if len(sys.argv) > 2:
         boss = sys.argv[1]
-        trial = int(sys.argv[2])
-        isViz = True if len(sys.argv) > 3 else False
-        ocr = OCR(boss, trial, isViz=isViz)
+        user = sys.argv[2]
+        trial = int(sys.argv[3])
+        lang = sys.argv[4] if len(sys.argv) > 4 else "eng"
+        binThres = int(sys.argv[5]) if len(sys.argv) > 5 else 189
+        isViz = True if len(sys.argv) > 6 else False
+        ocr = OCR(boss, user, trial, lang=lang, isViz=isViz, thres=binThres, mask_data_path="dmg_data.json", results_path="data/{0}/{1}/cr_results.db".format(boss, user))
 
         #loop through each comps
         for i in range(1, 7):
@@ -315,56 +477,32 @@ if __name__ == "__main__":
             img = ocr.load_image()
             masked_img_arr, label_arr = ocr.extract_regions(img)
             seg_img_arr = [] 
-            seg_img_arr_no = []
 
             #loop through each dps
             for j in range(len(masked_img_arr)):
-                seg_img_arr.append(ocr.segmentate_digits(masked_img_arr[j], counter=j))
-                seg_img_arr_no.append(ocr.segmentate_digits(masked_img_arr[j], isNoDilate=True, counter=j))
+                seg_img_arr.append(ocr.segmentate_digits(masked_img_arr[j], counter=5*(i-1)+(j+1), isNoDilate=False))
 
 
             text_results = {}
-            text_results_no = {}
 
             for j in range(len(seg_img_arr)):
                 text_results[label_arr[j]] = ocr.do_ocr(seg_img_arr[j])
-                text_results_no[label_arr[j]] = ocr.do_ocr(seg_img_arr_no[j])
 
             # calculate score in string(M/B unit)
             text_results = ocr.calculate_scores(text_results)
-            text_results_no = ocr.calculate_scores(text_results_no)
 
             # change numeric units in B
             b_results = ocr.calculate_b_score(text_results)
-            b_results_no = ocr.calculate_b_score(text_results_no)
 
 
             # calculate misc data
             char_results = ocr.calculate_char_score(b_results)
             role_results = ocr.calculate_role_score(b_results)
             total_dmg = ocr.calculate_sum_score(b_results)
-            score = ocr.calculate_confidence_score(b_results)
 
-
-            # calculate misc data with no dilation
-            char_results_no = ocr.calculate_char_score(b_results_no)
-            role_results_no = ocr.calculate_role_score(b_results_no)
-            total_dmg_no = ocr.calculate_sum_score(b_results_no)
-            score_no = ocr.calculate_confidence_score(b_results_no)
-
-            
-            print("dilation score : {0}, no dilation score :{1}".format(score, score_no))
-
-            # choose the recognition results which have the higher score
-            if score > score_no:
-                if isViz:
-                    ocr.visualize("result", total_dmg, role_results, char_results)
-                ocr.record_results(b_results, total_dmg, role_results, char_results)
-            else:
-                if isViz:
-                    ocr.visualize("result", total_dmg_no, role_results_no, char_results_no)
-                ocr.record_results(b_results_no, total_dmg_no, role_results_no, char_results_no)
+            ocr.record_results(b_results, total_dmg, role_results, char_results)
 
     else:
-        print("Usage : python3 analyze_cr.py [boss] [trial]")
+        print("Usage : python3 analyze_cr.py [boss] [user] [trial] [lang] [vis]")
 
+    """
