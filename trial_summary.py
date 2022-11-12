@@ -10,15 +10,18 @@ import json
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.neighbors import KernelDensity
 from scipy.stats import gaussian_kde
+import sys
 
-plt.switch_backend('QT4Agg') #default on my system
+plt.switch_backend('QT5Agg') #default on my system
 print('#3 Backend:',plt.get_backend())
 
 if __name__ == "__main__":
-    con = sqlite3.connect("data/cr_results.db")
+    boss = sys.argv[1]
+    user = sys.argv[2]
+    con = sqlite3.connect("data/{0}/{1}/cr_results.db".format(boss, user))
     df = pd.read_sql_query("SELECT * FROM cr_results", con)
 
-    df.to_excel("reports/summary.xlsx", index=False)
+    df.to_excel("data/{0}/{1}/reports/summary.xlsx".format(boss, user), index=False)
     char_dps = {}
     char_over_1b = {}
     tree = {}
@@ -82,7 +85,9 @@ if __name__ == "__main__":
         colormap = {"sorc" : "purple", "might" : "red", "cele" : "green", "sus": "blue", "fort": "yellow"}
 
         #print(tree_total_dmg)
-        fig = plt.figure(figsize=(16, 9))
+        #fig = plt.figure(figsize=(16, 9))
+        fig, ax = plt.subplots(2, 2, constrained_layout=True)
+        fig.suptitle('CR {0} compwise and treewise Damage'.format(boss), fontsize=16)
 
         #tree_sum_dmg = pd.DataFrame(columns=tree_total_dmg.columns.tolist())
         #print(tree_total_dmg)
@@ -100,26 +105,27 @@ if __name__ == "__main__":
         tree = tree_wise.loc[:, "sus":"might"].mean()
 
 
-        plt.subplot(2,2,1)
+        #plt.subplot(2,2,1)
         max_s = tree_total_dmg.sum()
         max_s_p = max_s.rename(lambda x: x.replace("_dps", ""))
         max_s = max_s.rename(lambda x: x.replace("_dps", "_max"))
-        max_s_p.plot.bar(title="role damage",color=[colormap[c]for c in max_s_p.keys()])
-        plt.grid()
-        plt.xlabel("role")
-        plt.yticks([i for i in range(10+1)])
-        plt.ylabel("max damage [B]")
+        max_s_p.plot.bar(title="role max damage",color=[colormap[c]for c in max_s_p.keys()], ax=ax[0,0])
+        #plt.grid()
+        ax[0,0].set_xlabel("role")
+        #ax[0,0].set_yticks([i for i in range(10+1)])
+        ax[0,0].set_ylabel("DMG [B]")
+        ax[0,0].set_yticks([i  for i in range(16)])
 
         avg = tree_avg_dmg.sum()
-        ax1 = plt.subplot(2,2,2)
+        #ax1 = plt.subplot(2,2,2)
         avg_p = avg.rename(lambda x: x.replace("_dps", ""))
         avg = avg.rename(lambda x: x.replace("_dps", "_avg"))
-        avg_p.plot.bar(title="role damage",color=[colormap[c]for c in avg_p.keys()])
-        plt.grid()
-        plt.xlabel("role")
-        plt.yticks([i for i in range(10+1)])
-        plt.ylabel("avg damage [B]")
-
+        avg_p.plot.bar(title="role avg damage",color=[colormap[c]for c in avg_p.keys()], ax=ax[0,1])
+        #plt.grid()
+        ax[0,1].set_xlabel("role")
+        ax[0,1].set_yticks([i for i in range(10+1)])
+        ax[0,1].set_ylabel("DMG [B]")
+        ax[0,1].set_yticks([i  for i in range(16)])
 
         max_s = max_s.rename(lambda x: x.replace("_dps", "_max"))
         tree_all = pd.concat([tree, max_s], axis=0)
@@ -140,23 +146,24 @@ if __name__ == "__main__":
 
 
 
-        ax2 = plt.subplot(2,2,3)
+        #ax2 = plt.subplot(2,2,3)
     
 
         #ax2.bar([i+1 for i in range(6)], comp_dmg, yerr=comp_std)
-
-        ax2.boxplot(comp_dmg)
-        ax2.set_title("comp damage")
-        ax2.set_xlabel("comp")
-        ax2.set_ylabel("damage [B]")
-
-        ax3 = plt.subplot(2,2,4)
+        
+        ax[1,0].boxplot(comp_dmg)
+        ax[1,0].set_title("comp damage")
+        ax[1,0].set_xlabel("comp")
+        ax[1,0].set_ylabel("DMG [B]")
+        ax[1,0].set_yticks([i  for i in range(11)])
+        #ax[1,0].set_yticks([i * 10])
+        #ax3 = plt.subplot(2,2,4)
         tree = tree.rename(lambda x: x.replace("_dps", ""))
-        tree.plot.bar(title="tree lvl", color=[colormap[c]for c in tree.keys()])
-        plt.xlabel("role")
-        plt.ylabel("level")
-        plt.ylim([0,165])
-
+        tree.plot.bar(title="tree lvl", color=[colormap[c]for c in tree.keys()], ax=ax[1,1])
+        ax[1,1].set_xlabel("role")
+        ax[1,1].set_ylabel("level")
+        #ax[1,1].set_ylim([0,170])
+        ax[1,1].set_yticks([i * 50 for i in range(5)])
         tree_l_list = tree.index.tolist()
         tree_list = tree.values.tolist()
         tree_map = {}
@@ -170,7 +177,7 @@ if __name__ == "__main__":
         #figManager = plt.get_current_fig_manager()
         #figManager.window.showMaximized()
         #fig.set_dpi(1000)
-        fig.savefig("reports/{0}-overview.png".format(tree_str), dpi=500)
+        fig.savefig("data/{0}/{1}/reports/{2}-overview.png".format(boss,user,tree_str), dpi=500)
 
         plt.close(fig)
 
@@ -181,9 +188,10 @@ if __name__ == "__main__":
         fig = plt.figure(figsize=(16,9))
         box = fig.add_subplot(1,1,1)
         box.boxplot(char_dps_v)
-        box.set_title("char damage at {0}".format(str(tree_map)))
+        box.set_title("CR {0} char damage at {1}".format(boss, str(tree_map)))
         box.set_xlabel("character")
-        box.set_ylabel("damage [B]")
+        box.set_ylabel("DMG [B]")
+        box.set_yticks([i for i in range(11)])
         box.set_xticks([i+1 for i in range(len(char_name))])
         box.set_xticklabels(char_name, fontsize=8)
         box.set_ylim([0, 10])
@@ -192,7 +200,7 @@ if __name__ == "__main__":
         #fig.set_dpi(1000)
 
         #fig2 = plt.gcf()
-        fig.savefig("reports/{0}-character.png".format(tree_str), dpi=500)
+        fig.savefig("data/{0}/{1}/reports/{2}-character.png".format(boss,user,tree_str), dpi=500)
         #plt.show()
 
         
@@ -210,9 +218,10 @@ if __name__ == "__main__":
             ax_arr[i].set_title("damage distribution of comp {0}".format(i + 1))
             ax_arr[i].set_ylabel("amount")
             ax_arr[i].set_xlabel("damage [B]")
+            ax_arr[i].set_yticks([i * 2 for i in range(7)])
             plt.tight_layout()
 
-        fig.savefig("reports/{0}-damage-distrib.png".format(tree_str), dpi=500)
+        fig.savefig("data/{0}/{1}/reports/{2}-damage-distrib.png".format(boss,user,tree_str), dpi=500)
         plt.close(fig)
 
 
@@ -220,25 +229,31 @@ if __name__ == "__main__":
     
     for role in role_arr:
         ax_arr = []
-        fig = plt.figure()
+        #fig = plt.figure()
+        fig, ax_arr = plt.subplots(3, 2, constrained_layout=True)
+        print(ax_arr.shape)
+        fig.suptitle('CR {0} Damage and {1} tree relationship'.format(boss, role), fontsize=16)
         for i in range(1,7):
-            ax_arr.append(fig.add_subplot(3,2,i))
+            #ax_arr.append(fig.add_subplot(3,2,i))
             comp = df[df["comp"] == i]
             lvl = comp.loc[:,role]
             score = comp.loc[:, "dps_1"] + comp.loc[:, "dps_2"] + comp.loc[:, "dps_3"] + comp.loc[:, "dps_4"] + comp.loc[:, "dps_5"]
-            ax_arr[i-1].scatter(lvl.values.tolist(), score.values.tolist())
+            vidx = math.floor((i-1)/2)
+            hidx = (i-1) % 2
+            ax_arr[vidx, hidx].scatter(lvl.values.tolist(), score.values.tolist())
             coef_M = np.corrcoef(lvl.values.tolist(), score.values.tolist())
             r = round(coef_M[0][1],2)
-            if r > 0.7 or r < -0.7:
+            if r > 0.6 or r < -0.6:
                 theta = np.polyfit(lvl.values.tolist(), score.values.tolist(), 1)
                 equ_line = theta[1] + theta[0] * np.array(lvl.values.tolist())
-                ax_arr[i-1].plot(lvl.values.tolist(), equ_line, color="red")
+                ax_arr[vidx, hidx].plot(lvl.values.tolist(), equ_line, color="red")
 
-            ax_arr[i-1].set_title("comp {0} dmg and {1}, r = {2}".format(i , role, r))
-            ax_arr[i-1].set_ylabel("dmg [B]")
-            ax_arr[i-1].set_xlabel("{0} Lvl".format(role))
+            ax_arr[vidx, hidx].set_title("comp {0} dmg and {1}, r = {2}".format(i , role, r))
+            ax_arr[vidx, hidx].set_ylabel("dmg [B]")
+            ax_arr[vidx, hidx].set_xlabel("{0} Lvl".format(role))
+            #ax_arr[vidx, hidx].set_yticks([i for i in range(11)])
 
-        fig.savefig("reports/{0}-corr.png".format(role), dpi=500)
+        fig.savefig("data/{0}/{1}/reports/{2}-corr.png".format(boss,user,role), dpi=500)
         plt.close(fig)
         #plt.show()
 

@@ -3,5 +3,5 @@
 # vscode
 .vscode/
 data/*.png
-data/*/*/*.png
-data/*/*/*.json
+data/*/*/*/*.png
+data/*/*/*/
