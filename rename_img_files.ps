@@ -1,9 +1,0 @@
-$count = 1
-$boss = $args[0]
-$trial = $args[1]
-write-host 'data/$boss/$trial'
-Get-ChildItem -Path 'data/$boss/$trial' -Filter '*.jpg' -File |
-Sort-Object LastWriteTime |
-Rename-Item -NewName { '{0:D4}{1}' -f $script:count++, $_.Extension } -WhatIf
-
-m
